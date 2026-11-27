@@ -2,7 +2,7 @@
    - Guarda o programa (HTML, CSS, JS, ícones) para abrir sem internet.
    - Guarda também as bibliotecas externas (Chart.js, SheetJS, Font Awesome, fontes) na primeira abertura com internet.
    - NUNCA guarda dados do usuário: eles ficam só no localStorage do navegador. */
-const VERSION = 'spotter-v5.0.1';
+const VERSION = 'spotter-v5.0.2';
 const SHELL = ['./', 'index.html', 'style.css', 'script.js', 'data-incidencia.js', 'data-edital.js', 'data-edital-prf.js', 'data-assets.js', 'manifest.webmanifest',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png', 'icons/apple-touch-icon.png'];
 const CDN = [
@@ -41,7 +41,7 @@ self.addEventListener('fetch', e => {
   e.respondWith((async () => {
     const cache = await caches.open(VERSION);
     const hit = await cache.match(req, { ignoreSearch: false }) || (req.mode === 'navigate' ? await cache.match('index.html') : null);
-    const net = fetch(req).then(r => { if (okResp(r)) cache.put(req, r.clone()); return r; }).catch(() => null);
+    const net = fetch(same ? new Request(req, { cache: 'no-cache' }) : req).then(r => { if (okResp(r)) cache.put(req, r.clone()); return r; }).catch(() => null);
     if (hit) { e.waitUntil(net); return hit; }          // rápido: usa o guardado e atualiza em segundo plano
     const r = await net;
     return r || new Response('Sem conexão e este arquivo ainda não foi guardado.', { status: 503, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
