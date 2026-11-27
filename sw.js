@@ -2,7 +2,7 @@
    - Guarda o programa (HTML, CSS, JS, ícones) para abrir sem internet.
    - Guarda também as bibliotecas externas (Chart.js, SheetJS, Font Awesome, fontes) na primeira abertura com internet.
    - NUNCA guarda dados do usuário: eles ficam só no localStorage do navegador. */
-const VERSION = 'spotter-v5.0.0';
+const VERSION = 'spotter-v5.0.1';
 const SHELL = ['./', 'index.html', 'style.css', 'script.js', 'data-incidencia.js', 'data-edital.js', 'data-edital-prf.js', 'data-assets.js', 'manifest.webmanifest',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png', 'icons/apple-touch-icon.png'];
 const CDN = [
