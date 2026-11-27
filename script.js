@@ -290,7 +290,7 @@ function sharedLinks() {
 }
 const otherMeta = kind => Auth.fixed().find(c => c.kind === (kind === 'pf' ? 'prf' : 'pf'));
 function readOther(m) { try { return JSON.parse(localStorage.getItem(Auth.dataKey(Auth.user, m.id)) || 'null'); } catch (e) { return null; } }
-function writeOther(m, st) { try { localStorage.setItem(Auth.dataKey(Auth.user, m.id), JSON.stringify(st)); } catch (e) { /* sem espaço: ignora */ } }
+function writeOther(m, st) { try { localStorage.setItem(Auth.dataKey(Auth.user, m.id), JSON.stringify(st)); if (typeof Cloud !== 'undefined') Cloud.markDirty(m); } catch (e) { /* sem espaço: ignora */ } }
 const setChk = (ck, id, v) => { if (v) ck[id] = true; else delete ck[id]; };
 /** Ao salvar: leva para o outro concurso as marcações que mudaram. */
 function pushShared() {
@@ -330,7 +330,7 @@ function pullShared() {
   }
   _chkSnap = { ...cur };
 }
-function save() { if (!STORE_KEY) return; pushShared(); try { localStorage.setItem(STORE_KEY, JSON.stringify(S)); } catch (e) { toast('Não foi possível salvar (armazenamento cheio?)', 'err'); } }
+function save() { if (!STORE_KEY) return; pushShared(); try { localStorage.setItem(STORE_KEY, JSON.stringify(S)); } catch (e) { toast('Não foi possível salvar (armazenamento cheio?)', 'err'); return; } if (typeof Cloud !== 'undefined') Cloud.touch(); }
 /** Persiste e re-renderiza. */
 /** Caderno de Erros do dia: fica "Feito" sozinho quando ≥1 erro foi resolvido hoje e não restam erros em aberto. O tempo (duração do bloco) entra nas horas totais, sem matéria. */
 function syncCaderno() {
@@ -393,7 +393,8 @@ const newSalt = () => { const a = new Uint8Array(16); (crypto && crypto.getRando
 const NICK_RE = /^[A-Za-z0-9._-]{3,24}$/;
 
 const Auth = {
-  user: null, cid: null,
+  user: null, cid: null, mode: 'local', email: '',
+  sess(cid) { return { user: this.user, cid, mode: this.mode, email: this.email }; },
   users: () => lsGet(K_USERS, {}),
   idxKey: u => `spotter-u:${u}:idx`,
   dataKey: (u, id) => `spotter-u:${u}:c:${id}`,
@@ -426,6 +427,7 @@ const Auth = {
       if (!target) { target = { id: uid(), name: kind === 'legacy' ? String(m.name || 'Concurso antigo').slice(0, 60) : KINDS[kind].name, icon, kind, created: todayStr() }; list.push(target); }
       else target.icon = icon;
       if (!lsSet(this.dataKey(this.user, target.id), st)) return { ok: false, error: 'Sem espaço no navegador para restaurar o backup.' };
+      if (typeof Cloud !== 'undefined') Cloud.markDirty(target);
       n++;
     }
     if (!n) return { ok: false, error: 'O backup não tem nenhum concurso válido.' };
@@ -448,9 +450,17 @@ const Auth = {
     if (!nick || !pw) return { ok: false, error: 'Informe usuário e senha.' };
     const u = this.users()[nick.toLowerCase()];
     if (!u || hashPw(pw, u.salt) !== u.hash) return { ok: false, error: 'Usuário ou senha incorretos.' };
-    this.user = nick.toLowerCase(); this.cid = null; this.ensureFixed(); lsSet(K_SESS, { user: this.user, cid: null }); return { ok: true };
+    this.user = nick.toLowerCase(); this.mode = 'local'; this.email = ''; this.cid = null; this.ensureFixed(); lsSet(K_SESS, this.sess(null)); return { ok: true };
   },
-  logout() { this.user = null; this.cid = null; STORE_KEY = null; try { localStorage.removeItem(K_SESS); } catch (e) { /* ignora */ } showAuth('login'); },
+  /** Entra com a conta da nuvem (e-mail): o "usuário" local passa a ser o id da conta. */
+  cloudEnter(u) { this.user = u.id; this.mode = 'cloud'; this.email = u.email || ''; this.cid = null; this.ensureFixed(); lsSet(K_SESS, this.sess(null)); },
+  logout() {
+    if (this.mode === 'cloud' && typeof Cloud !== 'undefined') { Cloud.logout(); return; }
+    this.afterLogout();
+  },
+  afterLogout() { this.user = null; this.cid = null; this.mode = 'local'; this.email = ''; STORE_KEY = null; try { localStorage.removeItem(K_SESS); } catch (e) { /* ignora */ } if (typeof Cloud !== 'undefined') Cloud.paint(); showAuth('login'); },
+  /** A sessão da nuvem acabou: volta ao login sem apagar os dados deste aparelho. */
+  sessionLost() { this.user = null; this.cid = null; this.mode = 'local'; STORE_KEY = null; try { localStorage.removeItem(K_SESS); } catch (e) { /* ignora */ } showAuth('login'); toast('Sua sessão expirou. Entre de novo; seus dados deste aparelho continuam guardados.', 'err'); },
   changePassword(cur, nw, nw2) {
     const us = this.users(), u = us[this.user];
     if (!u || hashPw(cur, u.salt) !== u.hash) return { ok: false, error: 'Senha atual incorreta.' };
@@ -482,7 +492,7 @@ const Auth = {
   /** Entra no concurso: carrega o estado dele e mostra o app. */
   enter(id) {
     if (!this.meta(id)) return false;
-    this.cid = id; lsSet(K_SESS, { user: this.user, cid: id }); STORE_KEY = this.dataKey(this.user, id);
+    this.cid = id; lsSet(K_SESS, this.sess(id)); STORE_KEY = this.dataKey(this.user, id);
     S = loadState(); pullShared(); if (syncCaderno()) save();
     UI.radar = { q: '', subject: '', inc: '', year: '', status: '', assunto: '' }; UI.revSubj = ''; fillSubjectSelects();
     Object.assign(UI, { revIdx: null, openMock: null, err: { cat: '', mock: '' }, plannerDate: todayStr(), weekStart: mondayOf(todayStr()), month: todayStr().slice(0, 7), view: 'overview' });
@@ -490,8 +500,14 @@ const Auth = {
   },
   boot() {
     const s = lsGet(K_SESS), us = this.users();
-    if (s && s.user && us[s.user]) { this.user = s.user; this.ensureFixed(); if (s.cid && this.meta(s.cid)) { this.enter(s.cid); return; } showAuth('profiles'); return; }
+    if (s && s.user && s.mode === 'cloud') {
+      this.user = s.user; this.mode = 'cloud'; this.email = s.email || ''; this.ensureFixed();
+      if (typeof Cloud !== 'undefined') Cloud.start();
+      if (s.cid && this.meta(s.cid)) { this.enter(s.cid); return; } showAuth('profiles'); return;
+    }
+    if (s && s.user && us[s.user]) { this.user = s.user; this.mode = 'local'; this.ensureFixed(); if (s.cid && this.meta(s.cid)) { this.enter(s.cid); return; } showAuth('profiles'); return; }
     showAuth('login');
+    if (typeof Cloud !== 'undefined') Cloud.resume();
   }
 };
 const iconSrc = m => { if (!m) return null; const ic = m.icon || (m.kind ? 'builtin:' + m.kind : ''); return !ic ? null : ic === 'builtin:pf' ? ASSETS.pf : ic === 'builtin:prf' ? ASSETS.prf : ic; };
@@ -536,16 +552,27 @@ function readIcon(file) {
 function showAuth(which) {
   $('.app').hidden = true; $('#auth').hidden = false;
   $('#loginView').hidden = which !== 'login'; $('#profilesView').hidden = which !== 'profiles';
-  if (which === 'login') { authMode('login'); $('#authUser').value = ''; $('#authPass').value = ''; $('#authErr').textContent = ''; setTimeout(() => $('#authUser').focus(), 30); }
+  if (which === 'login') { authKind(UI.authKind || defaultAuthKind()); authMode('login'); $('#authUser').value = ''; $('#authPass').value = ''; $('#authErr').textContent = ''; setTimeout(() => $('#authUser').focus(), 30); }
   else renderProfiles();
 }
-function showApp() { $('#auth').hidden = true; $('.app').hidden = false; renderBrand(); applyMenuState(); showView('overview'); }
+function showApp() { $('#auth').hidden = true; $('.app').hidden = false; if (typeof Cloud !== 'undefined') Cloud.paint(); renderBrand(); applyMenuState(); showView('overview'); }
 function renderBrand() {
   const m = Auth.meta(); if (!m) return;
   $('#brandIcon').innerHTML = iconHTML(m); $('#brandName').textContent = m.name; $('#brand').title = m.name;
 }
+/** Tipo de login: 'cloud' (e-mail, padrão) ou 'local' (conta antiga deste aparelho, só para migrar dados; também usado nos testes). */
+const hasLocalAccounts = () => Object.keys(Auth.users()).length > 0;
+const defaultAuthKind = () => (typeof window !== 'undefined' && window.SPOTTER_DEV ? 'local' : 'cloud');
+function authKind(kind) {
+  UI.authKind = kind; const cloud = kind === 'cloud';
+  $('#authUserLbl').textContent = cloud ? 'E-mail' : 'Usuário'; $('#authUser').placeholder = cloud ? 'seu@email.com' : 'Seu usuário ou apelido';
+  $('#authUser').maxLength = cloud ? 120 : 24; $('#authUser').autocomplete = 'username';
+  $('#authLegacyRow').hidden = !(cloud ? hasLocalAccounts() : true); $('#authLegacy').textContent = cloud ? 'Usar conta antiga deste aparelho' : 'Voltar ao login com e-mail';
+  authMode($('#loginForm').dataset.mode || 'login');
+}
 function authMode(mode) {
-  const reg = mode === 'register';
+  const reg = mode === 'register', cloud = (UI.authKind || defaultAuthKind()) === 'cloud';
+  $('#authForgotRow').hidden = reg || !cloud; $('#authNote').hidden = !(reg && cloud);
   $('#loginForm').dataset.mode = mode;
   $('#authConfirmRow').hidden = !reg; $('#authSubmit').textContent = reg ? 'Cadastrar' : 'Entrar';
   $('#authSwitchTxt').textContent = reg ? 'Já tem uma conta?' : 'Não tem uma conta?'; $('#authSwitch').textContent = reg ? 'Entrar' : 'Cadastre-se';
@@ -553,7 +580,7 @@ function authMode(mode) {
 }
 function renderProfiles() {
   const list = Auth.fixed(), us = Auth.users()[Auth.user];
-  $('#profUser').textContent = us ? us.nick : '';
+  $('#profUser').textContent = Auth.mode === 'cloud' ? Auth.email : us ? us.nick : '';
   $('#profilesView').classList.toggle('manage', UI.manage);
   $('#profManage').textContent = UI.manage ? 'Concluído' : 'Trocar ícones';
   $('#profGrid').innerHTML = list.map(c => `<div class="prof" data-prof="${c.id}" tabindex="0" role="button" aria-label="Abrir ${esc(c.name)}"><div class="prof-ic">${iconHTML(c)}<span class="prof-edit" data-pedit="${c.id}" title="Editar"><i class="fa-solid fa-pen"></i></span></div><span class="prof-name">${esc(c.name)}</span></div>`).join('');
@@ -571,10 +598,19 @@ function formConcurso(meta, after) {
       $('#cnFile', form).onchange = async e => { const f = e.target.files[0]; if (!f) return; try { icon = await readIcon(f); prev(); } catch (err) { toast('Não foi possível ler a imagem.', 'err'); } };
       $('#cnClear', form).onclick = () => { icon = null; $('#cnFile', form).value = ''; prev(); };
     },
-    onSubmit: () => { Auth.updateConcurso(meta.id, { icon }); if (Auth.cid === meta.id) renderBrand(); if (after) after(); toast('Ícone atualizado', 'ok'); }
+    onSubmit: () => { Auth.updateConcurso(meta.id, { icon }); if (typeof Cloud !== 'undefined') Cloud.markDirty({ ...meta, icon }); if (Auth.cid === meta.id) renderBrand(); if (after) after(); toast('Ícone atualizado', 'ok'); }
   });
 }
 function formPassword() {
+  if (Auth.mode === 'cloud') {
+    openForm({
+      title: 'Alterar senha',
+      fields: [{ name: 'nw', label: 'Nova senha (mín. 8 caracteres)', type: 'password', required: true, full: true }, { name: 'nw2', label: 'Confirmar nova senha', type: 'password', required: true, full: true }],
+      validate: d => (d.nw.length < 8 ? 'A nova senha deve ter pelo menos 8 caracteres.' : d.nw !== d.nw2 ? 'As senhas não conferem.' : ''),
+      onSubmit: async d => { const r = await Cloud.updatePassword(d.nw); toast(r.ok ? 'Senha alterada' : r.error, r.ok ? 'ok' : 'err'); }
+    });
+    return;
+  }
   openForm({
     title: 'Alterar senha',
     fields: [{ name: 'cur', label: 'Senha atual', type: 'password', required: true, full: true }, { name: 'nw', label: 'Nova senha (mín. 8 caracteres)', type: 'password', required: true, full: true }, { name: 'nw2', label: 'Confirmar nova senha', type: 'password', required: true, full: true }],
@@ -583,14 +619,51 @@ function formPassword() {
   });
 }
 function applyMenuState() { const c = !!lsGet(K_MENU, false); $('.app').classList.toggle('collapsed', c); const b = $('#menuCollapse'); if (b) { b.title = c ? 'Expandir menu' : 'Recolher menu'; b.setAttribute('aria-label', b.title); } }
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+async function cloudSubmit(reg) {
+  const em = $('#authUser').value.trim(), pw = $('#authPass').value, err = $('#authErr'), btn = $('#authSubmit');
+  if (!EMAIL_RE.test(em)) { err.textContent = 'Informe um e-mail válido.'; return; }
+  if (!pw) { err.textContent = 'Informe a senha.'; return; }
+  if (reg && pw.length < 8) { err.textContent = 'A senha deve ter pelo menos 8 caracteres.'; return; }
+  if (reg && pw !== $('#authPass2').value) { err.textContent = 'As senhas não conferem.'; return; }
+  btn.disabled = true; const txt = btn.textContent; btn.textContent = 'Aguarde…';
+  const r = reg ? await Cloud.signUp(em, pw) : await Cloud.signIn(em, pw);
+  btn.disabled = false; btn.textContent = txt;
+  if (!r.ok) { err.textContent = r.error; return; }
+  if (r.confirm) { authMode('login'); $('#authPass').value = ''; toast('Enviamos um e-mail de confirmação. Clique no link e depois entre aqui.', 'ok'); return; }
+  Auth.cloudEnter(r.user); btn.disabled = true; btn.textContent = 'Carregando seus dados…';
+  try { await Cloud.pull(); } catch (e) { /* offline: segue com o que há */ }
+  btn.disabled = false; btn.textContent = txt; Cloud.start(); UI.manage = false; showAuth('profiles');
+}
+async function openVersions() {
+  const m = Auth.meta(); if (!m) return;
+  if (Auth.mode !== 'cloud') { toast('Versões salvas só existem em conta com e-mail.', 'err'); return; }
+  const r = await Cloud.versions(m);
+  if (!r.ok) { toast(r.error, 'err'); return; }
+  if (!r.rows.length) { toast('Ainda não há versões salvas (a primeira é criada após o segundo dia de uso).', 'err'); return; }
+  choiceModal({ title: `Versões salvas — ${m.name}`, text: 'Restaurar substitui os dados atuais deste concurso pela versão escolhida (os atuais ficam guardados como cópia neste aparelho).',
+    options: r.rows.map((x, i) => ({ label: new Date(x.created_at).toLocaleString('pt-BR'), value: String(i) })),
+    onPick: v => { const row = r.rows[+v]; if (row && Cloud.restoreVersion(m, row)) toast('Versão restaurada.', 'ok'); else toast('Não foi possível restaurar.', 'err'); } });
+}
 function bindAuthEvents() {
   $('#loginForm').addEventListener('submit', e => {
     e.preventDefault(); const reg = $('#loginForm').dataset.mode === 'register';
     $('#authErr').textContent = '';
+    if ((UI.authKind || defaultAuthKind()) === 'cloud') { cloudSubmit(reg); return; }
     const r = reg ? Auth.register($('#authUser').value, $('#authPass').value, $('#authPass2').value) : Auth.login($('#authUser').value, $('#authPass').value);
     if (!r.ok) { $('#authErr').textContent = r.error; return; }
     UI.manage = false; showAuth('profiles');
   });
+  $('#authForgot').addEventListener('click', async e => {
+    e.preventDefault(); const em = $('#authUser').value.trim(), err = $('#authErr'); err.textContent = '';
+    if (!EMAIL_RE.test(em)) { err.textContent = 'Digite seu e-mail acima e clique em “Esqueci a senha”.'; return; }
+    const r = await Cloud.resetPassword(em);
+    if (r.ok) toast('Se o e-mail tiver cadastro, enviamos um link para criar uma nova senha. Veja a caixa de entrada e o spam.', 'ok'); else err.textContent = r.error;
+  });
+  $('#authLegacy').addEventListener('click', e => { e.preventDefault(); authKind(UI.authKind === 'cloud' ? 'local' : 'cloud'); });
+  $('#btnSyncNow').addEventListener('click', () => Cloud.syncNow(true));
+  $('#syncLine').addEventListener('click', () => Cloud.syncNow(true));
+  $('#btnVersions').addEventListener('click', openVersions);
   $('#authSwitch').addEventListener('click', e => { e.preventDefault(); authMode($('#loginForm').dataset.mode === 'register' ? 'login' : 'register'); });
   $('#authEye').addEventListener('click', () => { const i = $('#authPass'), show = i.type === 'password'; i.type = show ? 'text' : 'password'; $('#authPass2').type = i.type; $('#authEye').innerHTML = `<i class="fa-regular ${show ? 'fa-eye-slash' : 'fa-eye'}"></i>`; });
   $('#profGrid').addEventListener('click', e => {
@@ -601,7 +674,7 @@ function bindAuthEvents() {
   $('#profManage').addEventListener('click', () => { UI.manage = !UI.manage; renderProfiles(); });
   $('#profLogout').addEventListener('click', () => Auth.logout());
   $('#btnLogout').addEventListener('click', () => Auth.logout());
-  $('#btnSwitch').addEventListener('click', () => { Auth.cid = null; STORE_KEY = null; lsSet(K_SESS, { user: Auth.user, cid: null }); UI.manage = false; showAuth('profiles'); });
+  $('#btnSwitch').addEventListener('click', () => { Auth.cid = null; STORE_KEY = null; lsSet(K_SESS, Auth.sess(null)); UI.manage = false; showAuth('profiles'); });
   $('#menuCollapse').addEventListener('click', () => { lsSet(K_MENU, !lsGet(K_MENU, false)); applyMenuState(); });
   $('#btnEditConcurso').addEventListener('click', () => formConcurso(Auth.meta(), () => { renderBrand(); renderConfig(); }));
   $('#btnChangePw').addEventListener('click', formPassword);
@@ -2214,11 +2287,12 @@ function renderErrors() {
 /* ---- Config ---- */
 function trText(c) { return c > 0 ? (12 / c).toFixed(1).replace('.', ',') : '—'; }
 function renderConfig() {
+  if (typeof Cloud !== 'undefined') Cloud.paint();
   renderCfgSubjects();
   $$('.cfg-tab').forEach(b => { const on = b.dataset.cfgtab === UI.cfgTab; b.classList.toggle('active', on); b.setAttribute('aria-selected', on); });
   $$('.cfg-pane').forEach(p => { p.hidden = p.dataset.pane !== UI.cfgTab; });
   const cm = Auth.meta(), cu = Auth.users()[Auth.user];
-  if (cm) { $('#cfgConcurso').innerHTML = `<span class="cfg-ic">${iconHTML(cm)}</span> <b>${esc(cm.name)}</b>`; } if (cu) $('#cfgUser').textContent = cu.nick;
+  if (cm) { $('#cfgConcurso').innerHTML = `<span class="cfg-ic">${iconHTML(cm)}</span> <b>${esc(cm.name)}</b>`; } $('#cfgUser').textContent = Auth.mode === 'cloud' ? Auth.email : cu ? cu.nick : '';
   $('#cfgExam').value = S.settings.examDate; $('#cfgLastCut').value = S.settings.lastCut ?? ''; $('#cfgGoal').value = S.settings.dailyGoal;
   const r = S.rev;
   $('#revEdital').value = r.editalOut ? '1' : '0'; $('#revEditalDate').value = r.editalDate || ''; $('#revStart').value = r.startMonth;

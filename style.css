@@ -640,3 +640,15 @@ details.acc[open] .acc-ic { transform: rotate(180deg); }
 .subj-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 10px; border: 1px solid var(--border, rgba(255,255,255,.08)); border-radius: 8px; }
 .subj-row.off .chk { opacity: .55; }
 .subj-tools { display: flex; gap: 4px; flex-shrink: 0; }
+
+/* ---- v6.0: nuvem / sincronização ---- */
+.auth-note { font-size: 12px; line-height: 1.45; color: #8d98a8; text-align: center; margin: 2px 0 10px; }
+.sync-line { display: flex; align-items: center; gap: 8px; width: 100%; background: transparent; border: 0; padding: 6px 12px; color: #8d98a8; font: 500 11.5px/1.2 var(--mono); cursor: pointer; text-align: left; }
+.sync-line:hover { color: #fff; }
+.sync-line[hidden] { display: none; }
+.sync-dot { width: 7px; height: 7px; border-radius: 50%; background: #6b7686; flex: none; }
+.sync-line[data-state="ok"] .sync-dot { background: #8fd18f; }
+.sync-line[data-state="pending"] .sync-dot, .sync-line[data-state="offline"] .sync-dot, .sync-line[data-state="syncing"] .sync-dot { background: #e0c060; }
+.sync-line[data-state="error"] .sync-dot, .sync-line[data-state="conflict"] .sync-dot, .sync-line[data-state="nosession"] .sync-dot { background: #ff6b81; }
+.app.collapsed .sync-line { justify-content: center; padding: 6px 0; }
+.app.collapsed .sync-line .nav-t { display: none; }

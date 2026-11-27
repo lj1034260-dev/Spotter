@@ -27,12 +27,15 @@
       <div class="auth-body">
         <form class="auth-form" id="loginForm" data-mode="login" aria-label="Acesso" novalidate>
           <div class="auth-brand">Spotter</div>
-          <div class="auth-field"><label for="authUser">Usuário</label><input id="authUser" type="text" autocomplete="username" maxlength="24" placeholder="Seu usuário ou apelido"></div>
+          <div class="auth-field"><label for="authUser" id="authUserLbl">E-mail</label><input id="authUser" type="text" autocomplete="username" maxlength="120" placeholder="seu@email.com"></div>
           <div class="auth-field"><label for="authPass">Senha</label><div class="auth-pw"><input id="authPass" type="password" autocomplete="current-password" placeholder="Mínimo de 8 caracteres"><button type="button" id="authEye" aria-label="Mostrar senha"><i class="fa-regular fa-eye"></i></button></div></div>
           <div class="auth-field" id="authConfirmRow" hidden><label for="authPass2">Confirmar senha</label><input id="authPass2" type="password" autocomplete="new-password" placeholder="Repita a senha"></div>
           <div class="auth-err" id="authErr" role="alert"></div>
           <button class="auth-btn" id="authSubmit" type="submit">Entrar</button>
+          <p class="auth-note" id="authNote" hidden>Pedimos apenas e-mail e senha. Não informe dados pessoais, financeiros, CPF ou data de nascimento, e nunca responda a e-mails pedindo dados. Este programa foi feito com apoio de IA e pode ter vulnerabilidades.</p>
           <p class="auth-alt"><span id="authSwitchTxt">Não tem uma conta?</span> <a href="#" id="authSwitch">Cadastre-se</a></p>
+          <p class="auth-alt" id="authForgotRow"><a href="#" id="authForgot">Esqueci a senha</a></p>
+          <p class="auth-alt" id="authLegacyRow" hidden><a href="#" id="authLegacy">Usar conta antiga deste aparelho</a></p>
         </form>
         <div class="auth-art"><img id="authImg" alt=""></div>
       </div>
@@ -63,6 +66,7 @@
         <button class="nav-btn" data-view="erros" title="Caderno de Erros"><i class="fa-solid fa-triangle-exclamation"></i><span class="nav-t">Caderno de Erros</span><span class="count" id="navErrCount"></span></button>
       </nav>
       <div class="sidebar-foot">
+        <button class="sync-line" id="syncLine" type="button" hidden></button>
         <button class="nav-btn" data-view="config" title="Configurações"><i class="fa-solid fa-gear"></i><span class="nav-t">Configurações</span></button>
         <button class="nav-btn" id="btnSwitch" title="Trocar de concurso"><i class="fa-solid fa-repeat"></i><span class="nav-t">Trocar de concurso</span></button>
         <button class="nav-btn" id="btnLogout" title="Sair"><i class="fa-solid fa-right-from-bracket"></i><span class="nav-t">Sair</span></button>
@@ -384,7 +388,7 @@
             <div class="card-head"><h3><i class="fa-solid fa-id-badge"></i> Concurso e conta</h3></div>
             <div class="cfg-acc">
               <div class="cfg-line"><span class="muted">Concurso atual</span><span id="cfgConcurso"></span></div>
-              <div class="cfg-line"><span class="muted">Usuário</span><b id="cfgUser" class="mono"></b></div>
+              <div class="cfg-line"><span class="muted">Conta</span><b id="cfgUser" class="mono"></b></div>
             </div>
             <div class="btn-row" style="margin-top:14px"><button class="btn" id="btnEditConcurso"><i class="fa-solid fa-pen"></i> Trocar ícone do concurso</button><button class="btn" id="btnChangePw"><i class="fa-solid fa-key"></i> Alterar senha</button></div>
             <p class="muted" style="font-size:13px;margin-top:12px">Cada concurso tem seu próprio Planner, Edital, Revisões, Simulados e Erros.</p>
@@ -468,6 +472,15 @@
             <p class="muted" style="font-size:13px;margin-top:12px">Importação lê as abas <b>Simulados</b>, <b>Erros</b> e <b>Questões</b> (mesmo formato da exportação) e adiciona aos dados atuais.</p>
           </div>
           <div class="card">
+            <div class="card-head"><h3><i class="fa-solid fa-cloud"></i> Nuvem</h3></div>
+            <p class="muted" style="font-size:13px;margin-bottom:12px" id="cloudStatus"></p>
+            <div class="btn-row">
+              <button class="btn primary" id="btnSyncNow"><i class="fa-solid fa-rotate"></i> Sincronizar agora</button>
+              <button class="btn" id="btnVersions"><i class="fa-solid fa-clock-rotate-left"></i> Versões salvas</button>
+            </div>
+            <p class="muted" style="font-size:13px;margin-top:12px">Seus estudos ficam no seu aparelho e uma cópia na sua conta (Supabase), para você abrir em outros aparelhos. Só você os vê pelo programa, mas o administrador do banco de dados tecnicamente tem acesso: <b>não guarde aqui nada sensível</b>. A nuvem mantém as 3 últimas versões de cada concurso (no máximo 1 por dia).</p>
+          </div>
+          <div class="card mt">
             <div class="card-head"><h3><i class="fa-solid fa-box-archive"></i> Backup completo</h3></div>
             <p class="muted" style="font-size:13px;margin-bottom:12px">Guarda <b>todos os concursos da sua conta</b> (PF e PRF) em um único arquivo. Use para trocar de aparelho ou de endereço do programa: exporte aqui e restaure lá. O arquivo <b>não contém sua senha</b>, mas contém seus estudos — guarde-o só com você e <b>nunca o coloque em repositório público</b>.</p>
             <div class="btn-row">
@@ -514,6 +527,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="data-incidencia.js"></script>
   <script src="data-edital.js"></script>
   <script src="data-edital-prf.js"></script>
@@ -523,6 +537,8 @@
       document.body.insertAdjacentHTML('afterbegin', '<div style="position:fixed;z-index:9999;top:0;left:0;right:0;padding:14px 20px;background:#b3002d;color:#fff;font:600 15px sans-serif">Faltam arquivos: coloque <b>data-incidencia.js</b>, <b>data-edital.js</b>, <b>data-edital-prf.js</b> e <b>data-assets.js</b> na mesma pasta do index.html e recarregue a página (Ctrl+F5).</div>');
     }
   </script>
+  <script src="supabase-config.js"></script>
+  <script src="cloud.js"></script>
   <script src="script.js"></script>
 </body>
 </html>
