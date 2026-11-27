@@ -1,0 +1,16 @@
+# Mantém o banco gratuito do Supabase "acordado": projetos sem uso por 1 semana são pausados.
+# Roda sozinho a cada 3 dias. A chave abaixo é a PÚBLICA (publishable), a mesma do programa.
+name: Manter o Supabase ativo
+on:
+  schedule:
+    - cron: '17 6 */3 * *'
+  workflow_dispatch:
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Acessar a API do banco
+        run: |
+          curl -sS -o /dev/null -w "HTTP %{http_code}\n" \
+            "https://eozykzwnnvgkwazhokbo.supabase.co/rest/v1/concursos?select=cid&limit=1" \
+            -H "apikey: sb_publishable__R20zeZ3pZxUWu7chlPw6Q_sthYeaso"
