@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>SPOTTER CODE</title>
   <meta name="description" content="Central de operações para a preparação de concursos">
   <meta name="theme-color" content="#0c0c0d">
@@ -159,6 +159,7 @@
               <div class="date-nav">
                 <button class="icon-btn" id="weekPrev" aria-label="Semana anterior"><i class="fa-solid fa-chevron-left"></i></button>
                 <button class="btn sm" id="weekToday">Hoje</button>
+                <button class="btn sm phone-only" id="weekMode" type="button">Semana</button>
                 <button class="icon-btn" id="weekNext" aria-label="Próxima semana"><i class="fa-solid fa-chevron-right"></i></button>
               </div>
             </div>
@@ -494,6 +495,28 @@
       </section>
 
     </main>
+
+    <!-- ============ NAVEGAÇÃO INFERIOR (celular) ============ -->
+    <nav class="bottom-nav" id="bottomNav" aria-label="Navegação principal">
+      <button class="bn-btn active" data-view="overview"><i class="fa-solid fa-chart-pie"></i><span>Visão</span></button>
+      <button class="bn-btn" data-view="planner"><i class="fa-solid fa-calendar-check"></i><span>Planner</span></button>
+      <button class="bn-btn" data-view="revisoes"><i class="fa-solid fa-arrows-rotate"></i><span>Revisões</span><b class="bn-count" id="bnRevCount"></b></button>
+      <button class="bn-btn" data-view="erros"><i class="fa-solid fa-triangle-exclamation"></i><span>Erros</span><b class="bn-count" id="bnErrCount"></b></button>
+      <button class="bn-btn" id="bnMore" aria-haspopup="true" aria-expanded="false"><i class="fa-solid fa-ellipsis"></i><span>Mais</span></button>
+    </nav>
+    <div class="more-sheet" id="moreSheet" hidden>
+      <div class="more-back" data-more-close></div>
+      <div class="more-box" role="menu" aria-label="Mais opções">
+        <div class="more-grip"></div>
+        <button class="more-item" data-view="radar"><i class="fa-solid fa-crosshairs"></i><span>Radar de Incidência</span></button>
+        <button class="more-item" data-view="edital"><i class="fa-solid fa-sitemap"></i><span>Edital Verificado</span></button>
+        <button class="more-item" data-view="simulados"><i class="fa-solid fa-file-pen"></i><span>Simulados</span></button>
+        <button class="more-item" data-view="config"><i class="fa-solid fa-gear"></i><span>Configurações</span></button>
+        <button class="more-item" data-more-act="switch"><i class="fa-solid fa-repeat"></i><span>Trocar de concurso</span></button>
+        <button class="more-item" data-more-act="logout"><i class="fa-solid fa-right-from-bracket"></i><span>Sair</span></button>
+        <button class="sync-line" type="button" hidden></button>
+      </div>
+    </div>
   </div>
 
   <!-- MODAL GENÉRICO -->

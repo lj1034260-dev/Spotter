@@ -168,6 +168,7 @@ let S; // estado global
 let _revCache = null; // cache do motor de revisões (válido só durante um render)
 const UI = {
   view: 'overview',
+  weekFull: false,
   plannerDate: todayStr(),
   weekStart: mondayOf(todayStr()),
   month: todayStr().slice(0, 7),
@@ -662,7 +663,7 @@ function bindAuthEvents() {
   });
   $('#authLegacy').addEventListener('click', e => { e.preventDefault(); authKind(UI.authKind === 'cloud' ? 'local' : 'cloud'); });
   $('#btnSyncNow').addEventListener('click', () => Cloud.syncNow(true));
-  $('#syncLine').addEventListener('click', () => Cloud.syncNow(true));
+  $$('.sync-line').forEach(b => b.addEventListener('click', () => Cloud.syncNow(true)));
   $('#btnVersions').addEventListener('click', openVersions);
   $('#authSwitch').addEventListener('click', e => { e.preventDefault(); authMode($('#loginForm').dataset.mode === 'register' ? 'login' : 'register'); });
   $('#authEye').addEventListener('click', () => { const i = $('#authPass'), show = i.type === 'password'; i.type = show ? 'text' : 'password'; $('#authPass2').type = i.type; $('#authEye').innerHTML = `<i class="fa-regular ${show ? 'fa-eye-slash' : 'fa-eye'}"></i>`; });
@@ -1651,7 +1652,7 @@ function chartAnalytics(sub) {
   mk('chartTimeSubject', {
     type: 'doughnut',
     data: { labels: sub.map(s => s.name), datasets: [{ data: sub.map(s => +(s.minutes / 60).toFixed(1)), backgroundColor: palette.map(c => c + 'cc'), borderColor: '#0b0c0e', borderWidth: 3, hoverOffset: 10 }] },
-    options: { cutout: '62%', plugins: { legend: { position: 'right', labels: { font: { size: 12 } } }, tooltip: { callbacks: { label: i => ` ${i.label}: ${i.parsed}h` } } } }
+    options: { cutout: '62%', plugins: { legend: { position: legendPos(), labels: { font: { size: 12 } } }, tooltip: { callbacks: { label: i => ` ${i.label}: ${i.parsed}h` } } } }
   });
   const t = todayStr(), monday = mondayOf(t);
   const labels = [], vals = [];
@@ -1728,6 +1729,7 @@ function renderKPIs(c) {
 function renderHeader(c) {
   $('#navRevCount').textContent = c.pendingRev || '';
   $('#navErrCount').textContent = c.openErrors || '';
+  $('#bnRevCount').textContent = c.pendingRev || ''; $('#bnErrCount').textContent = c.openErrors || '';
 }
 
 /* =====================================================================
@@ -1794,13 +1796,18 @@ function updateGridRange() {
   S.plan.forEach(it => { a = Math.min(a, Math.floor(toMin(it.start) / 60)); b = Math.max(b, Math.ceil(endMin(it) / 60)); });
   GRID_START = clamp(a, 0, 23); GRID_END = clamp(b, GRID_START + 1, 24); GRID_ROWS = GRID_END - GRID_START;
 }
+const dayMode = () => isPhone() && !UI.weekFull;
 function renderWeek() {
   updateGridRange();
+  const oneDay = dayMode(); if (oneDay) UI.weekStart = mondayOf(UI.plannerDate);
   const t = todayStr(), days = Array.from({ length: 7 }, (_, i) => addDays(UI.weekStart, i));
-  $('#weekLabel').textContent = `${brDate(days[0]).slice(0, 5)} – ${brDate(days[6]).slice(0, 5)}`;
-  let html = '<div class="week"><div class="wk-corner"></div>';
+  $('#weekLabel').textContent = oneDay ? `${WEEKDAYS[parseD(UI.plannerDate).getDay()]} ${brDate(UI.plannerDate).slice(0, 5)}` : `${brDate(days[0]).slice(0, 5)} – ${brDate(days[6]).slice(0, 5)}`;
+  $('#weekMode').textContent = UI.weekFull ? 'Dia' : 'Semana';
+  $('#weekPrev').setAttribute('aria-label', oneDay ? 'Dia anterior' : 'Semana anterior'); $('#weekNext').setAttribute('aria-label', oneDay ? 'Próximo dia' : 'Próxima semana');
+  const off = d => (oneDay && d !== UI.plannerDate ? ' off' : '');
+  let html = `<div class="week${oneDay ? ' one' : ''}"><div class="wk-corner"></div>`;
   days.forEach(d => {
-    html += `<div class="wk-dayhead ${d === t ? 'today' : ''} ${d === UI.plannerDate ? 'sel' : ''}" data-action="pick-day" data-date="${d}">${WEEKDAYS[parseD(d).getDay()]}<b>${parseD(d).getDate()}</b></div>`;
+    html += `<div class="wk-dayhead${off(d)} ${d === t ? 'today' : ''} ${d === UI.plannerDate ? 'sel' : ''}" data-action="pick-day" data-date="${d}">${WEEKDAYS[parseD(d).getDay()]}<b>${parseD(d).getDate()}</b></div>`;
   });
   html += `<div class="wk-hours" style="--rows:${GRID_ROWS}">${Array.from({ length: GRID_ROWS + 1 }, (_, i) => `<span style="top:${i === 0 ? '3px' : i === GRID_ROWS ? 'calc(100% - 14px)' : `calc(${i} / ${GRID_ROWS} * 100% - 7px)`}">${z2((GRID_START + i) % 24)}h</span>`).join('')}</div>`;
   const total = GRID_ROWS * 60;
@@ -1813,7 +1820,7 @@ function renderWeek() {
       return `<div class="wk-block ${(e - s) < 45 ? 'short' : ''}" style="--tc:${cols[0]};top:${top}%;height:calc(${h}% - 1px);left:calc(${l}% + 2px);width:calc(${w}% - 4px)" data-action="view-item" data-id="${it.id}" data-date="${d}" title="${esc(it.type)} · ${esc(itemName(it, true))}">
         <b>${teo ? esc(subjShort(it.subjects[0])) : rot ? esc(it.title) : esc(it.type)}</b>${teo ? '<span>Teoria</span>' : rot ? '<span>Rotina</span>' : ''}${stripe}<i class="wk-resize" data-resize title="Arraste para mudar a duração"></i></div>`;
     }).join('');
-    html += `<div class="wk-col ${d === t ? 'today' : ''}" style="--rows:${GRID_ROWS}" data-action="grid-cell" data-date="${d}">${blocks}</div>`;
+    html += `<div class="wk-col${off(d)} ${d === t ? 'today' : ''}" style="--rows:${GRID_ROWS}" data-action="grid-cell" data-date="${d}">${blocks}</div>`;
   });
   html += '</div>';
   $('#weekGrid').innerHTML = html;
@@ -1948,13 +1955,13 @@ function renderRadar() {
   if (!single) {
     $('#radarPieTitle').textContent = `Peso de cada matéria${f.year ? ` — ${f.year}` : ''}`; $('#radarBarTitle').textContent = `Ranking por matéria (questões válidas${f.year ? ', ' + f.year : ''})`; $('#radarLineTitle').textContent = 'Evolução por ano (todas as matérias do edital)';
     const tot = SUBJECT_NAMES.map(n => discTotal(n, yr));
-    mk('chartRadarPie', { type: 'doughnut', data: { labels: SUBJECT_NAMES.map(subjShort), datasets: [{ data: tot, backgroundColor: SUBJECT_NAMES.map(subjColor), borderColor: '#0b0c0e', borderWidth: 2 }] }, options: { plugins: { legend: { position: 'right' } }, cutout: '58%' } });
+    mk('chartRadarPie', { type: 'doughnut', data: { labels: SUBJECT_NAMES.map(subjShort), datasets: [{ data: tot, backgroundColor: SUBJECT_NAMES.map(subjColor), borderColor: '#0b0c0e', borderWidth: 2 }] }, options: { plugins: { legend: { position: legendPos() } }, cutout: '58%' } });
     const ord = SUBJECT_NAMES.map((n, i) => ({ n, v: tot[i], c: subjColor(n) })).sort((a, b) => b.v - a.v);
     mk('chartRadarBar', { type: 'bar', data: { labels: ord.map(o => subjShort(o.n)), datasets: [{ data: ord.map(o => o.v), backgroundColor: ord.map(o => o.c), borderRadius: 6 }] }, options: { indexAxis: 'y', plugins: { legend: { display: false } } } });
   } else {
     const sd = radarSubjectData(f.subject, f.assunto);
     $('#radarPieTitle').textContent = `Assuntos de ${subjShort(f.subject)} (peso)`; $('#radarBarTitle').textContent = f.assunto ? `Tópicos de “${cut(f.assunto, 40)}”` : `Tópicos de ${subjShort(f.subject)} (maior incidência)`; $('#radarLineTitle').textContent = `Evolução por ano — ${subjShort(f.subject)}`;
-    mk('chartRadarPie', { type: 'doughnut', data: { labels: sd.pie.map(o => cut(o.l, 34)), datasets: [{ data: sd.pie.map(o => o.v), backgroundColor: sd.pie.map((_, i) => PIE_PALETTE[i % PIE_PALETTE.length]), borderColor: '#0b0c0e', borderWidth: 2 }] }, options: { plugins: { legend: { position: 'right', labels: { boxWidth: 10, font: { size: 11 } } } }, cutout: '58%' } });
+    mk('chartRadarPie', { type: 'doughnut', data: { labels: sd.pie.map(o => cut(o.l, 34)), datasets: [{ data: sd.pie.map(o => o.v), backgroundColor: sd.pie.map((_, i) => PIE_PALETTE[i % PIE_PALETTE.length]), borderColor: '#0b0c0e', borderWidth: 2 }] }, options: { plugins: { legend: { position: legendPos(), labels: { boxWidth: 10, font: { size: 11 } } } }, cutout: '58%' } });
     mk('chartRadarBar', { type: 'bar', data: { labels: sd.bars.map(o => cut(o.l, 44)), datasets: [{ data: sd.bars.map(o => o.v), backgroundColor: sd.bars.map(o => INC_COLOR[incLevelOf(o.v)]), borderRadius: 6 }] }, options: { indexAxis: 'y', plugins: { legend: { display: false } }, scales: { y: { ticks: { autoSkip: false, font: { size: 11 } } } } } });
   }
   const lineVals = EXAM_YEARS.map(y => single ? discTotal(f.subject, [y]) : sumArr(SUBJECT_NAMES.map(n => discTotal(n, [y]))));
@@ -2330,11 +2337,16 @@ function renderAll() {
     ({ overview: () => renderOverview(c), planner: renderPlanner, radar: renderRadar, edital: renderEdital, simulados: renderMocks, revisoes: renderReviews, erros: renderErrors, config: renderConfig })[UI.view]();
   } finally { _revCache = null; }
 }
+function closeMore() { const m = $('#moreSheet'); if (!m) return; m.hidden = true; $('#bnMore').setAttribute('aria-expanded', 'false'); }
+function openMore() { $('#moreSheet').hidden = false; $('#bnMore').setAttribute('aria-expanded', 'true'); }
+const isPhone = () => window.matchMedia('(max-width:700px)').matches;
+const legendPos = () => (isPhone() ? 'bottom' : 'right');
 function showView(name) {
   UI.view = name;
   $$('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + name));
-  $$('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.view === name));
-  $('#sidebar').classList.remove('open');
+  $$('.nav-btn, .bn-btn[data-view]').forEach(b => b.classList.toggle('active', b.dataset.view === name));
+  const moreViews = ['radar', 'edital', 'simulados', 'config']; $('#bnMore').classList.toggle('active', moreViews.includes(name));
+  $('#sidebar').classList.remove('open'); closeMore();
   renderAll(); window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
@@ -2405,11 +2417,17 @@ function dragStart(e) {
   const it = S.plan.find(x => x.id === blk.dataset.id); if (!it) return;
   const col = blk.closest('.wk-col'), r = col.getBoundingClientRect(), pxMin = r.height / (GRID_ROWS * 60);
   _drag = { blk, it, occ: blk.dataset.date, resize: !!e.target.closest('[data-resize]'), x0: e.clientX, y0: e.clientY, pxMin, moved: false, s0: toMin(it.start), e0: endMin(it), dur: durMin(it), colTop: r.top };
-  blk.setPointerCapture?.(e.pointerId);
+  if (e.pointerType === 'touch') {   // toque: só arrasta após segurar ~0,45 s; antes disso a página rola normalmente
+    const d = _drag; d.pending = true;
+    d.timer = setTimeout(() => { if (_drag === d) { d.pending = false; d.blk.classList.add('lifted'); try { navigator.vibrate && navigator.vibrate(15); } catch (er) { /* ignora */ } } }, 450);
+  }
+  try { blk.setPointerCapture && blk.setPointerCapture(e.pointerId); } catch (er) { /* ponteiro já encerrado */ }
 }
+function dragCancel() { const d = _drag; _drag = null; if (!d) return; clearTimeout(d.timer); d.blk.classList.remove('dragging', 'lifted'); if (d.moved) renderWeek(); }
 function dragMove(e) {
   const d = _drag; if (!d) return;
   const dx = e.clientX - d.x0, dy = e.clientY - d.y0;
+  if (d.pending) { if (Math.hypot(dx, dy) > 8) { clearTimeout(d.timer); _drag = null; } return; }
   if (!d.moved && Math.hypot(dx, dy) < 5) return;
   d.moved = true; d.blk.classList.add('dragging');
   if (d.resize) { const nh = Math.max(15, Math.round((d.e0 - d.s0 + dy / d.pxMin) / 15) * 15); d.newEnd = Math.min(1440, d.s0 + nh); d.blk.style.height = `${(d.newEnd - d.s0) * d.pxMin}px`; }
@@ -2417,7 +2435,8 @@ function dragMove(e) {
 }
 function dragEnd(e) {
   const d = _drag; _drag = null; if (!d) return;
-  d.blk.classList.remove('dragging');
+  clearTimeout(d.timer); d.blk.classList.remove('dragging', 'lifted');
+  if (d.pending) return;
   if (!d.moved) return;
   _justDragged = true; setTimeout(() => { _justDragged = false; }, 0);
   if (d.resize) { if (d.newEnd && d.newEnd !== d.e0) moveItem(d.it, d.occ, d.occ, fromMin(d.s0), fromMin(d.newEnd)); else renderWeek(); return; }
@@ -2580,11 +2599,22 @@ function bindEvents() {
   // Navegação
   $$('.nav-btn[data-view]').forEach(b => b.addEventListener('click', () => showView(b.dataset.view)));
   $('#menuBtn').addEventListener('click', () => $('#sidebar').classList.toggle('open'));
+  // Navegação inferior (celular) e folha "Mais"
+  $$('.bn-btn[data-view], .more-item[data-view]').forEach(b => b.addEventListener('click', () => showView(b.dataset.view)));
+  $('#bnMore').addEventListener('click', () => { $('#moreSheet').hidden ? openMore() : closeMore(); });
+  $('#moreSheet').addEventListener('click', e => {
+    if (e.target.closest('[data-more-close]')) return closeMore();
+    const a = e.target.closest('[data-more-act]'); if (!a) return;
+    closeMore(); (a.dataset.moreAct === 'switch' ? $('#btnSwitch') : $('#btnLogout')).click();
+  });
+  addEventListener('keydown', e => { if (e.key === 'Escape') closeMore(); });
   // Planner — botões
   $('#addTaskBtn').onclick = () => formPlan({ date: UI.plannerDate });
   // Planner — semana
-  $('#weekPrev').onclick = () => { UI.weekStart = addDays(UI.weekStart, -7); renderWeek(); };
-  $('#weekNext').onclick = () => { UI.weekStart = addDays(UI.weekStart, 7); renderWeek(); };
+  $('#weekPrev').onclick = () => { if (dayMode()) { UI.plannerDate = addDays(UI.plannerDate, -1); renderPlanner(); } else { UI.weekStart = addDays(UI.weekStart, -7); renderWeek(); } };
+  $('#weekNext').onclick = () => { if (dayMode()) { UI.plannerDate = addDays(UI.plannerDate, 1); renderPlanner(); } else { UI.weekStart = addDays(UI.weekStart, 7); renderWeek(); } };
+  $('#weekMode').onclick = () => { UI.weekFull = !UI.weekFull; renderWeek(); };
+  window.matchMedia('(max-width:700px)').addEventListener('change', () => { if (UI.view === 'planner') renderPlanner(); });
   $('#weekToday').onclick = () => { UI.weekStart = mondayOf(todayStr()); UI.plannerDate = todayStr(); renderPlanner(); };
   // Planner — dia
   $('#plannerDate').onchange = e => { UI.plannerDate = e.target.value || todayStr(); UI.weekStart = mondayOf(UI.plannerDate); renderPlanner(); };
@@ -2620,7 +2650,8 @@ function bindEvents() {
   // Arrastar blocos do cronograma
   const wg = $('#weekGrid');
   wg.addEventListener('pointerdown', dragStart);
-  addEventListener('pointermove', dragMove); addEventListener('pointerup', dragEnd);
+  addEventListener('pointermove', dragMove); addEventListener('pointerup', dragEnd); addEventListener('pointercancel', dragCancel);
+  addEventListener('touchmove', e => { if (_drag && !_drag.pending) e.preventDefault(); }, { passive: false });
   addEventListener('click', e => { if (_justDragged) { e.stopPropagation(); e.preventDefault(); } }, true);
   // Demais módulos
   $('#addMockBtn').onclick = () => formMock(); $('#addErrorBtn').onclick = formError;

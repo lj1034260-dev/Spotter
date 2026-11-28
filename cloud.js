@@ -233,8 +233,8 @@ const Cloud = (() => {
   const LONG = { off: 'Conta local deste aparelho: não há sincronização. Use “Exportar tudo” e importe numa conta com e-mail.', nolib: 'Sem conexão com o serviço de contas. Os dados ficam neste aparelho e sobem depois.', offline: 'Sem internet. As alterações estão guardadas aqui e sobem quando a conexão voltar.', pending: 'Há alterações que ainda não subiram para a nuvem.', syncing: 'Sincronizando…', ok: 'Tudo sincronizado.', error: 'Não foi possível sincronizar agora. Tentaremos de novo.', conflict: 'Há dados diferentes entre este aparelho e a nuvem. Clique em “Sincronizar agora” para escolher.', nosession: 'Sua sessão expirou. Entre de novo.' };
   function status() { return active() ? state : 'off'; }
   function paint() {
-    const st = status(), line = $('#syncLine'), card = $('#cloudStatus');
-    if (line) { line.dataset.state = st; line.hidden = !Auth.user; line.innerHTML = `<i class="sync-dot"></i><span class="nav-t">${SHORT[st] || ''}</span>`; line.title = LONG[st] || ''; }
+    const st = status(), lines = $$('.sync-line'), card = $('#cloudStatus');
+    lines.forEach(line => { line.dataset.state = st; line.hidden = !Auth.user; line.innerHTML = `<i class="sync-dot"></i><span class="nav-t">${SHORT[st] || ''}</span>`; line.title = LONG[st] || ''; });
     if (card) card.textContent = (LONG[st] || '') + (st === 'ok' && lastOk ? ` Última: ${new Date(lastOk).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}.` : '') + (lastErr && st === 'error' ? ` (${lastErr})` : '');
   }
 
